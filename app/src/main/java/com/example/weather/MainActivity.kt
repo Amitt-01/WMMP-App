@@ -31,16 +31,16 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.weather.ui.theme.WeatherTheme
 
-// AuthViewModel aur AuthStep ko import kiya hai
+// AuthViewModel and AuthStep imports
 import com.example.weather.network.AuthStep
 import com.example.weather.network.AuthViewModel
 
-// Sabhi screens ko import kiya hai
+// All screen imports
 import com.example.weather.screens.HomeScreen
 import com.example.weather.screens.MoodScreen
 import com.example.weather.screens.RideScreen
 import com.example.weather.screens.ProfileScreen
-import com.example.weather.screens.AuthScreen // Sign In screen ka import
+import com.example.weather.screens.AuthScreen // Sign In screen import
 
 import org.maplibre.android.MapLibre
 
@@ -82,28 +82,28 @@ fun MainScreen(authViewModel: AuthViewModel = viewModel()) {
 
         NavHost(navController = navController, startDestination = Screen.Home.route) {
 
-            // 1. HOME (Weather) - Ye sabke liye open hai
+            // 1. HOME (Weather) - Open for everyone
             composable(Screen.Home.route) {
                 HomeScreen()
             }
 
-            // 2. MOOD (Music) - Guarded by ProtectedScreenWrapper
+            // 2. MOOD (Music) - Guarded by ProtectedScreenWrapper, passes "Music"
             composable(Screen.Mood.route) {
-                ProtectedScreenWrapper(authViewModel) {
+                ProtectedScreenWrapper(authViewModel, featureName = "Music") {
                     MoodScreen()
                 }
             }
 
-            // 3. RIDE (Map) - Guarded by ProtectedScreenWrapper
+            // 3. RIDE (Map) - Guarded by ProtectedScreenWrapper, passes "Map"
             composable(Screen.Ride.route) {
-                ProtectedScreenWrapper(authViewModel) {
+                ProtectedScreenWrapper(authViewModel, featureName = "Map") {
                     RideScreen()
                 }
             }
 
-            // 4. PROFILE - Guarded by ProtectedScreenWrapper
+            // 4. PROFILE - Guarded by ProtectedScreenWrapper, passes "Profile"
             composable(Screen.Profile.route) {
-                ProtectedScreenWrapper(authViewModel) {
+                ProtectedScreenWrapper(authViewModel, featureName = "Profile") {
                     ProfileScreen(authViewModel)
                 }
             }
@@ -119,9 +119,13 @@ fun MainScreen(authViewModel: AuthViewModel = viewModel()) {
     }
 }
 
-//  New FIX:wrapper check
+// FIXED: Wrapper now takes featureName to dynamically update text and handle direct sign-in
 @Composable
-fun ProtectedScreenWrapper(authViewModel: AuthViewModel, content: @Composable () -> Unit) {
+fun ProtectedScreenWrapper(
+    authViewModel: AuthViewModel,
+    featureName: String,
+    content: @Composable () -> Unit
+) {
     val user by authViewModel.user.collectAsState()
     val authStep by authViewModel.authStep.collectAsState()
 
@@ -131,14 +135,14 @@ fun ProtectedScreenWrapper(authViewModel: AuthViewModel, content: @Composable ()
     var showSignInPage by remember { mutableStateOf(false) }
 
     if (isAuthenticated) {
-        // Agar login hai toh seedha feature dikhao
+        // If logged in, show the actual feature screen
         content()
     } else {
-        if (showSignInPage) {
-            // Button click karne ke baad asli Sign In screen khulegi
+        // Direct Sign-In for Profile OR if the user clicked "Sign In Now" on other screens
+        if (featureName == "Profile" || showSignInPage) {
             AuthScreen(authViewModel)
         } else {
-            // Pyara sa message bina login wale users ke liye
+            // Friendly lock message for Music and Map features
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -163,8 +167,9 @@ fun ProtectedScreenWrapper(authViewModel: AuthViewModel, content: @Composable ()
 
                     Spacer(modifier = Modifier.height(24.dp))
 
+                    // Dynamic Title based on featureName
                     Text(
-                        text = "Unlock Premium Features!",
+                        text = "Unlock $featureName Feature",
                         color = Color.White,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
@@ -173,8 +178,9 @@ fun ProtectedScreenWrapper(authViewModel: AuthViewModel, content: @Composable ()
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Dynamic Subtitle based on featureName
                     Text(
-                        text = "Please sign in to enjoy Music, Navigation, and manage your Profile. It's completely free!",
+                        text = "Please sign in to enjoy $featureName. It's completely free!",
                         color = Color.LightGray,
                         fontSize = 14.sp,
                         textAlign = TextAlign.Center,

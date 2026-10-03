@@ -10,7 +10,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
-import com.example.weather.BuildConfig // 🟢 NAYA FIX: BuildConfig Import kiya
+import com.example.weather.BuildConfig
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -40,7 +40,6 @@ interface AudiusApiService {
 object AudiusRetrofitClient {
     val apiService: AudiusApiService by lazy {
         Retrofit.Builder()
-            // 🟢 NAYA FIX: Hardcoded URL ki jagah BuildConfig lagaya
             .baseUrl(BuildConfig.AUDIUS_BASE_URL)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
@@ -155,7 +154,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     .setArtworkUri(Uri.parse(imageUrl))
                     .build()
 
-                // 🟢 NAYA FIX: Hardcoded URL ki jagah BuildConfig lagaya
                 val streamUrl = "${BuildConfig.AUDIUS_BASE_URL}v1/tracks/${track.id}/stream?app_name=WeatherMoodApp"
 
                 MediaItem.Builder().setUri(streamUrl).setMediaMetadata(metadata).build()

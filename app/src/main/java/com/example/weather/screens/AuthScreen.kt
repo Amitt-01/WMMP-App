@@ -1,6 +1,7 @@
 package com.example.weather.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -24,6 +26,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.weather.R // Added for custom logo reference
 import com.example.weather.network.AuthStep
 import com.example.weather.network.AuthViewModel
 import kotlinx.coroutines.delay
@@ -70,7 +73,12 @@ fun AuthScreen(authViewModel: AuthViewModel = viewModel()) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(Icons.Filled.Dashboard, contentDescription = "Logo", tint = Color.White, modifier = Modifier.size(50.dp))
+            // Logo Updated Here
+            Image(
+                painter = painterResource(id = R.drawable.app_logo),
+                contentDescription = "Logo",
+                modifier = Modifier.size(50.dp)
+            )
             Spacer(modifier = Modifier.height(12.dp))
             Text("WMMP", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
 
@@ -92,11 +100,7 @@ fun AuthScreen(authViewModel: AuthViewModel = viewModel()) {
                         },
                         label = { Text("Email ID", color = Color.Gray) },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFF151515), unfocusedContainerColor = Color(0xFF151515),
-                            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                            focusedIndicatorColor = Color(0xFF865D46), unfocusedIndicatorColor = Color(0xFF333333)
-                        ),
+                        colors = authTextFieldColors(), // OPTIMIZED: reusable color block
                         shape = RoundedCornerShape(12.dp), singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                         trailingIcon = {
@@ -124,13 +128,7 @@ fun AuthScreen(authViewModel: AuthViewModel = viewModel()) {
                             modifier = Modifier.fillMaxWidth(),
                             visualTransformation = PasswordVisualTransformation(),
                             enabled = isEmailVerified,
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color(0xFF151515), unfocusedContainerColor = Color(0xFF151515),
-                                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                                focusedIndicatorColor = Color(0xFF865D46), unfocusedIndicatorColor = Color(0xFF333333),
-                                disabledContainerColor = Color(0xFF151515), disabledTextColor = Color.Gray,
-                                disabledIndicatorColor = Color(0xFF333333)
-                            ),
+                            colors = authTextFieldColors(), // OPTIMIZED: reusable color block
                             shape = RoundedCornerShape(12.dp), singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done)
                         )
@@ -221,16 +219,13 @@ fun AuthScreen(authViewModel: AuthViewModel = viewModel()) {
                     )
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 🟢 NAYA FIX: Flawless DOB formatting (without premature 0 padding)
                     OutlinedTextField(
                         value = dobInput,
                         onValueChange = { input ->
                             if (input.length <= 10) {
-                                // 1. Remove anything that isn't a number
                                 var clean = input.replace(Regex("[^0-9]"), "")
                                 if (clean.length > 8) clean = clean.take(8)
 
-                                // 2. Validate max days (31) and max months (12) silently
                                 if (clean.length >= 2) {
                                     val d = clean.substring(0, 2).toIntOrNull() ?: 1
                                     if (d > 31) clean = "31" + clean.substring(2)
@@ -242,30 +237,23 @@ fun AuthScreen(authViewModel: AuthViewModel = viewModel()) {
                                     if (m == 0) clean = clean.substring(0, 2) + "01" + clean.substring(4)
                                 }
 
-                                // 3. Rebuild string with slashes at the right positions
                                 val res = StringBuilder()
                                 for (i in clean.indices) {
                                     if (i == 2 || i == 4) res.append("/")
                                     res.append(clean[i])
                                 }
 
-                                // 4. Auto-append slash only if the user is typing forward
                                 if (input.length > dobInput.length) {
                                     if (clean.length == 2 || clean.length == 4) {
                                         res.append("/")
                                     }
                                 }
-
                                 dobInput = res.toString()
                             }
                         },
                         label = { Text("Date of Birth (DD/MM/YYYY)", color = Color.Gray) },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFF151515), unfocusedContainerColor = Color(0xFF151515),
-                            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                            focusedIndicatorColor = Color(0xFF865D46), unfocusedIndicatorColor = Color(0xFF333333)
-                        ),
+                        colors = authTextFieldColors(), // OPTIMIZED: reusable color block
                         shape = RoundedCornerShape(12.dp), singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next)
                     )
@@ -319,17 +307,23 @@ fun AuthHeader(title: String, subtitle: String) {
     }
 }
 
+// 🟢 NEW FIX: Reusable Color Function
+@Composable
+fun authTextFieldColors() = TextFieldDefaults.colors(
+    focusedContainerColor = Color(0xFF151515), unfocusedContainerColor = Color(0xFF151515),
+    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+    focusedIndicatorColor = Color(0xFF865D46), unfocusedIndicatorColor = Color(0xFF333333),
+    disabledContainerColor = Color(0xFF151515), disabledTextColor = Color.Gray,
+    disabledIndicatorColor = Color(0xFF333333)
+)
+
 @Composable
 fun CustomTextField(value: String, onValueChange: (String) -> Unit, label: String, type: KeyboardType, isPassword: Boolean = false) {
     OutlinedTextField(
         value = value, onValueChange = onValueChange, label = { Text(label, color = Color.Gray) },
         modifier = Modifier.fillMaxWidth(),
         visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = Color(0xFF151515), unfocusedContainerColor = Color(0xFF151515),
-            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-            focusedIndicatorColor = Color(0xFF865D46), unfocusedIndicatorColor = Color(0xFF333333)
-        ),
+        colors = authTextFieldColors(), // OPTIMIZED: reusable color block
         shape = RoundedCornerShape(12.dp), singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = type, imeAction = ImeAction.Next)
     )

@@ -20,8 +20,8 @@ android {
         applicationId = "com.example.weather"
         minSdk = 28
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -31,8 +31,7 @@ android {
         buildConfigField("String", "AUDIUS_BASE_URL", "\"${localProperties.getProperty("AUDIUS_BASE_URL")}\"")
         buildConfigField("String", "OSRM_BASE_URL", "\"${localProperties.getProperty("OSRM_BASE_URL")}\"")
         buildConfigField("String", "MAP_TILE_URL", "\"${localProperties.getProperty("MAP_TILE_URL")}\"")
-
-
+        buildConfigField("String", "UPDATE_CHECK_URL", "\"${localProperties.getProperty("UPDATE_CHECK_URL")}\"")
 
         // 1. NATIVE LIBRARIES OPTIMIZATION
         ndk {
@@ -42,13 +41,8 @@ android {
 
     buildTypes {
         release {
-            // 2. PROGUARD and RESOURCE SHRINKING
-            isMinifyEnabled = true // Unused code and extra libraries auto delete
-            isShrinkResources = true // Unused img, icons and XML file
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
     compileOptions {
@@ -65,6 +59,7 @@ android {
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)

@@ -1,10 +1,17 @@
 package com.example.weather.screens
 
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
+import android.os.Environment
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,9 +31,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -34,10 +43,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.weather.BuildConfig
+import com.example.weather.R
 import com.example.weather.network.AuthStep
 import com.example.weather.network.AuthViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -48,6 +67,7 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
     val scrollState = rememberScrollState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val coroutineScope = rememberCoroutineScope()
 
     val user by authViewModel.user.collectAsState()
     val profile by authViewModel.userProfile.collectAsState()
@@ -60,18 +80,18 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
     var nameInput by remember { mutableStateOf("") }
     var nameErrorMsg by remember { mutableStateOf("") }
 
-    // SETTINGS STATE VARIABLES
     var showSettingsMenu by remember { mutableStateOf(false) }
     var showDeleteWarning by remember { mutableStateOf(false) }
     var showChangePwdDialog by remember { mutableStateOf(false) }
     var showSignOutWarning by remember { mutableStateOf(false) }
 
-    // SECURITY POPUPS
     var showDobVerification by remember { mutableStateOf(false) }
     var showOtpDialog by remember { mutableStateOf(false) }
     var showNewPasswordDialog by remember { mutableStateOf(false) }
 
-    // ANIMATION STATES
+    // State for About Dialog
+    var showAboutDialog by remember { mutableStateOf(false) }
+
     var showSuccessAnimation by remember { mutableStateOf(false) }
     var successAnimMessage by remember { mutableStateOf("") }
 
@@ -86,7 +106,51 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
     var dobErrorMsg by remember { mutableStateOf("") }
     var otpInput by remember { mutableStateOf("") }
 
-    val isUpdateAvailable by remember { mutableStateOf(true) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var isUpdateAvailable by remember { mutableStateOf(false) }
+    var isDownloadingUpdate by remember { mutableStateOf(false) } // Newly added state variable
+    var updateUrl by remember { mutableStateOf("") }
+
+    // Fetch app version dynamically from build.gradle
+    val currentAppVersion = try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.1"
+    } catch (e: Exception) {
+        "1.1" // Default to 1.1 if an error occurs
+    }
+
+    fun checkForUpdate() {
+        coroutineScope.launch(Dispatchers.IO) {
+            isCheckingUpdate = true
+            try {
+                val url = URL(BuildConfig.UPDATE_CHECK_URL)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 3000
+
+                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                    val response = connection.inputStream.bufferedReader().use { it.readText() }
+                    val jsonObject = JSONObject(response)
+                    val latestVersion = jsonObject.getString("latestVersion")
+                    val apkUrl = jsonObject.getString("downloadUrl")
+
+                    if (latestVersion != currentAppVersion) {
+                        isUpdateAvailable = true
+                        updateUrl = apkUrl
+                    } else {
+                        isUpdateAvailable = false
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                isCheckingUpdate = false
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        checkForUpdate()
+    }
 
     if (user == null || authStep == AuthStep.SETUP_PROFILE) {
         AuthScreen(authViewModel)
@@ -104,7 +168,12 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Dashboard, contentDescription = "Logo", tint = Color.White)
+                        // Logo Updated Here
+                        Image(
+                            painter = painterResource(id = R.drawable.app_logo),
+                            contentDescription = "Logo",
+                            modifier = Modifier.size(24.dp)
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("WMMP", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     }
@@ -122,31 +191,62 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
             }
 
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                Spacer(modifier = Modifier.height(24.dp))
 
-                if (isUpdateAvailable) {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF198754).copy(alpha = 0.15f))
-                            .border(1.dp, Color(0xFF198754), RoundedCornerShape(12.dp))
-                            .clickable { uriHandler.openUri("https://github.com/your-repo/releases") } // Apna GitHub release link daal dein
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Outlined.SystemUpdate, contentDescription = "Update", tint = Color(0xFF4BB543), modifier = Modifier.size(28.dp))
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("New Update Available", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("Tap here to download the latest version.", color = Color(0xFFCCCCCC), fontSize = 12.sp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("General", color = Color.LightGray, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+
+                    if (isUpdateAvailable) {
+                        val infiniteTransition = rememberInfiniteTransition(label = "bell_transition")
+                        val angle by infiniteTransition.animateFloat(
+                            initialValue = -20f,
+                            targetValue = 20f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(150, easing = LinearEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "bell_animation"
+                        )
+
+                        // Replaced Browser download with In-App Download Function
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable(enabled = !isDownloadingUpdate) {
+                                    isDownloadingUpdate = true
+                                    downloadAndInstallUpdate(context, updateUrl) {
+                                        isDownloadingUpdate = false
+                                    }
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.NotificationsActive,
+                                contentDescription = "Update Available",
+                                tint = Color(0xFF198754),
+                                modifier = Modifier.size(14.dp).graphicsLayer { rotationZ = if(isDownloadingUpdate) 0f else angle }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isDownloadingUpdate) "Downloading..." else "Update App", color = Color(0xFF198754), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+                    } else {
+                        Text(
+                            text = if (isCheckingUpdate) "Checking..." else "Check Update",
+                            color = Color.Gray,
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { checkForUpdate() }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                Text("General", color = Color.LightGray, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val displayFullName = if (profile?.fullName.isNullOrEmpty()) "Not set yet" else profile!!.fullName!!
@@ -164,8 +264,9 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
                 Text("App Info", color = Color.LightGray, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                MenuItem(icon = Icons.Outlined.Info, title = "About Developer", onClick = { uriHandler.openUri("https://amitt-m.vercel.app/") })
-                MenuItem(icon = Icons.Outlined.Article, title = "Documentation", onClick = { uriHandler.openUri("https://github.com/your-username/your-repo#readme") })
+                // Changed About link to show In-App Dialog & Updated Documentation Link
+                MenuItem(icon = Icons.Outlined.Info, title = "About", onClick = { showAboutDialog = true })
+                MenuItem(icon = Icons.Outlined.Article, title = "Documentation", onClick = { uriHandler.openUri("https://github.com/Amitt-01/WMMP-App.git") })
 
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider(color = Color(0xFF222222), thickness = 1.dp)
@@ -193,7 +294,74 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
         }
     }
 
-    //  DIALOGS (POPUPS) SECTION
+    // DIALOGS SECTION
+
+    // Custom About App Dialog (Matching screenshot style)
+    if (showAboutDialog) {
+        Dialog(onDismissRequest = { showAboutDialog = false }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color(0xFF151515))
+                    .border(1.dp, Color(0xFF333333), RoundedCornerShape(24.dp))
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Circular Logo
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF222222)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.app_logo),
+                            contentDescription = "App Logo",
+                            modifier = Modifier.size(45.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // App Version
+                    Text(
+                        text = "Version $currentAppVersion",
+                        color = Color(0xFFA07BFF),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Brief App Description
+                    Text(
+                        text = "WMMP is a simple and secure app to access weather updates, music, and maps effortlessly.",
+                        color = Color.LightGray,
+                        fontSize = 15.sp,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 22.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Developer Credit
+                    Text(
+                        text = "Developed by WMMP",
+                        color = Color.Gray,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+
     if (showSignOutWarning) {
         AlertDialog(
             onDismissRequest = { showSignOutWarning = false },
@@ -223,7 +391,8 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
                     OutlinedTextField(
                         value = nameInput, onValueChange = { if (it.length <= 15) nameInput = it },
                         label = { Text("Max 15 letters", color = Color.Gray) }, singleLine = true,
-                        colors = TextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedContainerColor = Color(0xFF222222), unfocusedContainerColor = Color(0xFF222222), focusedIndicatorColor = Color(0xFFA07BFF), unfocusedIndicatorColor = Color(0xFF333333))
+                        colors = dialogTextFieldColors(),
+                        shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("${nameInput.length}/15", color = Color.Gray, fontSize = 12.sp)
@@ -284,7 +453,8 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
                     OutlinedTextField(
                         value = oldPwdInput, onValueChange = { oldPwdInput = it },
                         label = { Text("Old Password", color = Color.Gray) }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
-                        colors = TextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedContainerColor = Color(0xFF222222), unfocusedContainerColor = Color(0xFF222222), focusedIndicatorColor = Color(0xFFA07BFF), unfocusedIndicatorColor = Color(0xFF333333))
+                        colors = dialogTextFieldColors(),
+                        shape = RoundedCornerShape(12.dp)
                     )
                     Box(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.CenterEnd) {
                         Text(
@@ -301,13 +471,15 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
                     OutlinedTextField(
                         value = newPwdInput, onValueChange = { newPwdInput = it },
                         label = { Text("New Password", color = Color.Gray) }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
-                        colors = TextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedContainerColor = Color(0xFF222222), unfocusedContainerColor = Color(0xFF222222), focusedIndicatorColor = Color(0xFFA07BFF), unfocusedIndicatorColor = Color(0xFF333333))
+                        colors = dialogTextFieldColors(),
+                        shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = confirmPwdInput, onValueChange = { confirmPwdInput = it },
                         label = { Text("Re-enter New Password", color = Color.Gray) }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
-                        colors = TextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedContainerColor = Color(0xFF222222), unfocusedContainerColor = Color(0xFF222222), focusedIndicatorColor = Color(0xFFA07BFF), unfocusedIndicatorColor = Color(0xFF333333))
+                        colors = dialogTextFieldColors(),
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     if (settingsLoading) { Spacer(modifier = Modifier.height(16.dp)); CircularProgressIndicator(color = Color(0xFFA07BFF), modifier = Modifier.size(24.dp).align(Alignment.CenterHorizontally)) }
@@ -327,7 +499,7 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
                                     showChangePwdDialog = false
                                     successAnimMessage = "Password Changed Successfully!"
                                     showSuccessAnimation = true
-                                } else pwdChangeError = msg
+                                }
                             }
                         }
                     }
@@ -370,7 +542,8 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
                     OutlinedTextField(
                         value = dobInput, onValueChange = { dobInput = it },
                         label = { Text("e.g. DD/MM/YYYY", color = Color.Gray) }, singleLine = true,
-                        colors = TextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedContainerColor = Color(0xFF222222), unfocusedContainerColor = Color(0xFF222222), focusedIndicatorColor = Color(0xFFA07BFF), unfocusedIndicatorColor = Color(0xFF333333))
+                        colors = dialogTextFieldColors(),
+                        shape = RoundedCornerShape(12.dp)
                     )
                     if (settingsLoading) { Spacer(modifier = Modifier.height(16.dp)); CircularProgressIndicator(color = Color(0xFFA07BFF), modifier = Modifier.size(24.dp).align(Alignment.CenterHorizontally)) }
                     if (dobErrorMsg.isNotEmpty()) { Spacer(modifier = Modifier.height(8.dp)); Text(dobErrorMsg, color = Color(0xFFFF6B6B), fontSize = 12.sp) }
@@ -466,13 +639,15 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
                     OutlinedTextField(
                         value = newPwdInput, onValueChange = { newPwdInput = it },
                         label = { Text("New Password", color = Color.Gray) }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
-                        colors = TextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedContainerColor = Color(0xFF222222), unfocusedContainerColor = Color(0xFF222222), focusedIndicatorColor = Color(0xFFA07BFF), unfocusedIndicatorColor = Color(0xFF333333))
+                        colors = dialogTextFieldColors(),
+                        shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = confirmPwdInput, onValueChange = { confirmPwdInput = it },
                         label = { Text("Re-enter New Password", color = Color.Gray) }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
-                        colors = TextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedContainerColor = Color(0xFF222222), unfocusedContainerColor = Color(0xFF222222), focusedIndicatorColor = Color(0xFFA07BFF), unfocusedIndicatorColor = Color(0xFF333333))
+                        colors = dialogTextFieldColors(),
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     if (settingsLoading) { Spacer(modifier = Modifier.height(16.dp)); CircularProgressIndicator(color = Color(0xFFA07BFF), modifier = Modifier.size(24.dp).align(Alignment.CenterHorizontally)) }
@@ -529,6 +704,63 @@ fun ProfileScreen(authViewModel: AuthViewModel = viewModel()) {
     }
 }
 
+// In-App Download Code added at the bottom
+fun downloadAndInstallUpdate(context: Context, apkUrl: String, onCompleteCallback: () -> Unit) {
+    Toast.makeText(context, "Update downloading in background...", Toast.LENGTH_SHORT).show()
+
+    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    val uri = Uri.parse(apkUrl)
+    val request = DownloadManager.Request(uri).apply {
+        setTitle("WMMP Update")
+        setDescription("Downloading latest version...")
+        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "WMMP_Update.apk")
+    }
+
+    val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "WMMP_Update.apk")
+    if (file.exists()) file.delete()
+
+    val downloadId = downloadManager.enqueue(request)
+
+    val onComplete = object : BroadcastReceiver() {
+        override fun onReceive(ctxt: Context, intent: Intent) {
+            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+            if (id == downloadId) {
+                try {
+                    val apkUri = FileProvider.getUriForFile(ctxt, "${ctxt.packageName}.provider", file)
+                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(apkUri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    ctxt.startActivity(installIntent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    Toast.makeText(ctxt, "Failed to start installation.", Toast.LENGTH_SHORT).show()
+                }
+                onCompleteCallback()
+                ctxt.unregisterReceiver(this)
+            }
+        }
+    }
+
+    ContextCompat.registerReceiver(
+        context,
+        onComplete,
+        IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+        ContextCompat.RECEIVER_EXPORTED
+    )
+}
+
+@Composable
+fun dialogTextFieldColors() = TextFieldDefaults.colors(
+    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+    focusedContainerColor = Color(0xFF222222), unfocusedContainerColor = Color(0xFF222222),
+    focusedIndicatorColor = Color(0xFFA07BFF), unfocusedIndicatorColor = Color(0xFF333333)
+)
+
+private val MONTHS_LIST = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
 fun formatDobDisplay(dob: String?): String {
     if (dob.isNullOrEmpty()) return "Not set yet"
     return try {
@@ -537,8 +769,7 @@ fun formatDobDisplay(dob: String?): String {
             val day = parts[0]
             val monthIndex = parts[1].toInt() - 1
             val year = parts[2]
-            val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-            val monthName = months.getOrElse(monthIndex) { "" }
+            val monthName = MONTHS_LIST.getOrElse(monthIndex) { "" }
             "$day $monthName $year"
         } else dob
     } catch (e: Exception) { "Format Error" }
@@ -553,8 +784,7 @@ fun formatDate(dateString: String?): String {
             val year = parts[0]
             val monthIndex = parts[1].toInt() - 1
             val day = parts[2]
-            val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-            val monthName = months.getOrElse(monthIndex) { "" }
+            val monthName = MONTHS_LIST.getOrElse(monthIndex) { "" }
             "$day $monthName $year"
         } else dateString
     } catch (e: Exception) { "Format Error" }

@@ -41,7 +41,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.weather.BuildConfig // 🟢 NAYA FIX: BuildConfig import kiya
+import com.example.weather.BuildConfig
 import com.example.weather.network.MapViewModel
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -49,7 +49,6 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 
-// --- MapLibre Imports ---
 import org.maplibre.android.annotations.MarkerOptions
 import org.maplibre.android.annotations.PolylineOptions
 import org.maplibre.android.camera.CameraPosition
@@ -87,7 +86,6 @@ fun RideScreen(mapViewModel: MapViewModel = viewModel()) {
 
     val mapView = remember { MapView(context) }
 
-    //  New FIX: URL come on BuildConfig file
     val darkStyleJson = """
     {
       "version": 8,
@@ -266,12 +264,7 @@ fun RideScreen(mapViewModel: MapViewModel = viewModel()) {
                     .padding(top = 16.dp, start = 16.dp, end = 16.dp)
             ) {
                 if (isRideActive) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF198754)),
-                        shape = RoundedCornerShape(16.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-                    ) {
+                    MapCardStyle(containerColor = Color(0xFF198754), border = null, elevation = 8.dp) { // 🟢 OPTIMIZED
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(16.dp)
@@ -288,12 +281,7 @@ fun RideScreen(mapViewModel: MapViewModel = viewModel()) {
                     }
                 }
                 else if (isRoutingMode) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, Color(0x33FFFFFF))
-                    ) {
+                    MapCardStyle { //OPTIMIZED (Uses default Dark Grey + Border)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(8.dp)
@@ -430,12 +418,7 @@ fun RideScreen(mapViewModel: MapViewModel = viewModel()) {
                 }
 
                 if (suggestions.isNotEmpty() && !isRideActive) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, Color(0x33FFFFFF))
-                    ) {
+                    MapCardStyle(modifier = Modifier.padding(top = 8.dp)) { // OPTIMIZED
                         Column {
                             suggestions.forEachIndexed { index, suggestion ->
                                 Text(
@@ -575,4 +558,23 @@ fun RideScreen(mapViewModel: MapViewModel = viewModel()) {
             }
         }
     }
+}
+
+// New fix: Reusable Card Component for UI Consistency & Shorter Code
+@Composable
+fun MapCardStyle(
+    modifier: Modifier = Modifier,
+    containerColor: Color = Color(0xFF1E1E1E),
+    border: BorderStroke? = BorderStroke(1.dp, Color(0x33FFFFFF)),
+    elevation: androidx.compose.ui.unit.Dp = 0.dp,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        shape = RoundedCornerShape(16.dp),
+        border = border,
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
+        content = content
+    )
 }
